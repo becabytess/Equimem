@@ -1,7 +1,7 @@
 """Unit tests for the AITutor class."""
 from unittest.mock import MagicMock
 import pytest
-from geo_anki import AITutor, MassFieldEngine, FieldConfig, NGramEmbedder, Card, DecisionGrader
+from equimem import AITutor, MassFieldEngine, FieldConfig, NGramEmbedder, Card, DecisionGrader
 
 
 def test_tutor_loop_with_mocked_grader():

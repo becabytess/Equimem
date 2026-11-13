@@ -1,7 +1,7 @@
 """Unit tests for the core MassFieldEngine mechanics."""
 import pytest
 import numpy as np
-from geo_anki import MassFieldEngine, FieldConfig, NGramEmbedder
+from equimem import MassFieldEngine, FieldConfig, NGramEmbedder
 
 
 def test_mass_conservation_and_ripple():

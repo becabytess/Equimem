@@ -16,11 +16,11 @@ from dotenv import load_dotenv
 # Ensure local imports work
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geo_anki.models import FieldConfig
-from geo_anki.engine import MassFieldEngine
-from geo_anki.embedder import GeminiEmbedder, Embedder
-from geo_anki.grader import DecisionGrader
-from geo_anki.template import format_card
+from equimem.models import FieldConfig
+from equimem.engine import MassFieldEngine
+from equimem.embedder import GeminiEmbedder, Embedder
+from equimem.grader import DecisionGrader
+from equimem.template import format_card
 from lab.deck_50 import CARDS_DATA
 from lab.student_responses import STUDENT_RESPONSES
 

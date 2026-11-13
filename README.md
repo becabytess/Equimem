@@ -1,8 +1,8 @@
-# Conserved-Mass Geometric Anki Engine
+# Equimem: Continuous Conserved-Memory Engine
 
 A flashcard and knowledge-state engine modeled as a **conserved scalar mass field** over frozen unit concept embeddings.
 
-Traditional spaced repetition systems (SM-2, Anki, FSRS) rely on artificial wall-clock time intervals and independent binary cards. In contrast, this engine models human memory as a continuous manifold where concepts interact through semantic similarity, and forgetting occurs through **competitive interference** rather than elapsed time.
+Traditional spaced repetition systems (SM-2, Anki, FSRS) rely on artificial wall-clock time intervals and independent binary cards. In contrast, **Equimem** (*Equilibrium* + *Memory*) models human memory as a continuous manifold where concepts interact through semantic similarity, and forgetting occurs through **competitive interference** rather than elapsed time.
 
 ---
 
@@ -40,8 +40,8 @@ Traditional spaced repetition systems (SM-2, Anki, FSRS) rely on artificial wall
 ## 2. Project Architecture
 
 ```
-geo_anki/
-├── geo_anki/
+equimem/
+├── equimem/
 │   ├── __init__.py           # Package exports
 │   ├── models.py             # Data structures (FieldConfig, Card, FieldSnapshot, GradeResult)
 │   ├── template.py           # Structured Q&A formatting for dense embedding
@@ -58,6 +58,9 @@ geo_anki/
 │   ├── test_engine.py        # Mass conservation, kernel ripple, and selection unit tests
 │   ├── test_grader.py        # Decision grader unit tests
 │   └── test_tutor.py         # Full tutor workflow tests
+├── pyproject.toml            # Project build configuration
+└── .env                      # API keys (GOOGLE_API_KEY / GEMINI_API_KEY)
+```
 ├── pyproject.toml            # Project build configuration
 └── .env                      # API keys (GOOGLE_API_KEY / GEMINI_API_KEY)
 ```
@@ -128,7 +131,7 @@ Install dependencies and configure your Google Gemini API key:
 pip install google-genai numpy pytest python-dotenv
 ```
 
-Add your API key to `geo_anki/.env`:
+Add your API key to `.env`:
 ```ini
 GOOGLE_API_KEY=your_actual_api_key_here
 ```
@@ -137,7 +140,6 @@ GOOGLE_API_KEY=your_actual_api_key_here
 Verify engine mechanics and mass conservation:
 
 ```bash
-cd geo_anki
 python -m pytest
 ```
 
@@ -152,10 +154,10 @@ python lab/simulate_50_cards.py
 ### 4. Basic Code Example
 
 ```python
-from geo_anki.models import FieldConfig
-from geo_anki.engine import MassFieldEngine
-from geo_anki.embedder import GeminiEmbedder
-from geo_anki.grader import DecisionGrader
+from equimem.models import FieldConfig
+from equimem.engine import MassFieldEngine
+from equimem.embedder import GeminiEmbedder
+from equimem.grader import DecisionGrader
 
 # 1. Initialize components
 embedder = GeminiEmbedder(model="gemini-embedding-001")

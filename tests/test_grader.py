@@ -1,7 +1,7 @@
 """Unit tests for DecisionGrader."""
 from unittest.mock import MagicMock
 import pytest
-from geo_anki import DecisionGrader, Card, GradeResult
+from equimem import DecisionGrader, Card, GradeResult
 
 
 def test_grader_mocked_success():
