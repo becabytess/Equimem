@@ -96,7 +96,7 @@ We evaluated the engine across 40 continuous rounds on a 60-card deck spanning 5
 | **Linear Algebra** | 12 | 1.0000 | 0.9975 | 1.0230 |
 | **Quantum Mechanics** | 12 | 1.0000 | **0.9604** (Valley) | **1.0238** (Remediated) |
 | **Global Invariant ($\sum m_i$)** | **60** | **60.000000** | **60.000000** | **60.000000** |
-| **Surface Variance $\operatorname{Var}(\bar{m})$** | — | 0.00000 | 0.00318 | **0.00054** |
+| **Surface Variance Var(m_bar)** | — | 0.00000 | 0.00318 | **0.00054** |
 
 Total scalar mass remained **strictly 60.000000** at every single update.
 
