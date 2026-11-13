@@ -61,9 +61,6 @@ equimem/
 ├── pyproject.toml            # Project build configuration
 └── .env                      # API keys (GOOGLE_API_KEY / GEMINI_API_KEY)
 ```
-├── pyproject.toml            # Project build configuration
-└── .env                      # API keys (GOOGLE_API_KEY / GEMINI_API_KEY)
-```
 
 ---
 
@@ -77,29 +74,29 @@ We evaluated the engine across 40 continuous rounds on a 60-card deck spanning 5
 5. **Deep Learning & Optimization** (Cards 48–59)
 
 ### Phase 1: Uneven Student Profile (Rounds 1–20)
-- **Profile**: Student is strong in Linear Algebra & Algorithms ($y \approx 1.0$), partial in Info Theory ($y \approx 0.6$), and holds misconceptions in Quantum Mechanics ($y \approx 0.0$).
+- **Profile**: Student is strong in Linear Algebra & Algorithms (`y ≈ 1.0`), partial in Info Theory (`y ≈ 0.6`), and holds misconceptions in Quantum Mechanics (`y ≈ 0.0`).
 - **Grader Output**:
-  - Quantum error (e.g. No-Cloning theorem misconception): $P_0 = 0.98, P_1 = 0.02, P_2 = 0.00 \implies \text{Score} = 0.010$. Card mass dropped from $0.970 \to 0.468$.
-  - Algorithm success (e.g. Quickselect average time): $P_0 = 0.00, P_1 = 0.02, P_2 = 0.98 \implies \text{Score} = 0.992$. Card mass rose from $1.000 \to 1.569$.
+  - Quantum error (e.g. No-Cloning theorem misconception): `P0 = 0.98, P1 = 0.02, P2 = 0.00` → `Score = 0.010`. Card mass dropped from `0.970` to `0.468`.
+  - Algorithm success (e.g. Quickselect average time): `P0 = 0.00, P1 = 0.02, P2 = 0.98` → `Score = 0.992`. Card mass rose from `1.000` to `1.569`.
 - **Selection Behavior**: The engine identified the negative gradient in Quantum Mechanics and concentrated review turns on the Quantum valley (Cards 04, 02, 08, 05, 09, 11, 01).
 
 ### Phase 2: Active Remediation & Dynamic Shift (Rounds 21–40)
-- **Remediation**: At Round 21, the student studied Quantum Mechanics, answering with high accuracy ($y \ge 0.94$).
+- **Remediation**: At Round 21, the student studied Quantum Mechanics, answering with high accuracy (`y ≥ 0.94`).
 - **Surface Adaptation**:
-  - As Quantum card masses rose ($0.77 \to 1.31$), the Quantum valley was eliminated ($\bar{m}_{QM}$ rose to $1.0238$).
+  - As Quantum card masses rose (`0.77` to `1.31`), the Quantum valley was eliminated (average QM mastery rose to `1.0238`).
   - Once the valley flattened, the engine **autonomously shifted focus** away from Quantum to sample other unmastered concepts: Linear Algebra (Spectral Theorem, QR decomposition), Information Theory (Gibbs sampling, Bayes), and Deep Learning (LoRA, Attention).
 
 ### Empirical Mastery Distribution
 
-| Domain | Card Count | Initial $\bar{m}$ (T=0) | Phase 1 $\bar{m}$ (T=20) | Final $\bar{m}$ (T=40) |
+| Domain | Card Count | Initial Mastery m̄ (T=0) | Phase 1 Mastery m̄ (T=20) | Final Mastery m̄ (T=40) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Algorithms** | 12 | 1.0000 | 1.0342 | 0.9749 |
 | **Deep Learning** | 12 | 1.0000 | 0.9961 | 0.9912 |
 | **Information Theory** | 12 | 1.0000 | 1.0118 | 1.0055 |
 | **Linear Algebra** | 12 | 1.0000 | 0.9975 | 1.0230 |
 | **Quantum Mechanics** | 12 | 1.0000 | **0.9604** (Valley) | **1.0238** (Remediated) |
-| **Global Invariant ($\sum m_i$)** | **60** | **60.000000** | **60.000000** | **60.000000** |
-| **Surface Variance Var(m_bar)** | — | 0.00000 | 0.00318 | **0.00054** |
+| **Global Invariant (Total Mass)** | **60** | **60.000000** | **60.000000** | **60.000000** |
+| **Surface Variance Var(m̄)** | — | 0.00000 | 0.00318 | **0.00054** |
 
 Total scalar mass remained **strictly 60.000000** at every single update.
 
