@@ -11,12 +11,21 @@ requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.22.0",
     "google-genai>=3.2.0",
+    "pydantic>=2.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "mcp>=2.0.0",
 ]
 
 [project.optional-dependencies]
 test = [
     "pytest>=7.0.0",
+    "httpx>=0.24.0",
 ]
+
+[project.scripts]
+equimem-server = "equimem.server:main"
+equimem-mcp = "equimem.mcp_server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

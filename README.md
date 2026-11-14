@@ -48,7 +48,9 @@ equimem/
 │   ├── embedder.py           # GeminiEmbedder (3072 dims) with local NGram fallback
 │   ├── grader.py             # DecisionGrader (gemini-decision-1 evaluation head)
 │   ├── engine.py             # MassFieldEngine (conservation, kernel, selection, trajectories)
-│   └── tutor.py              # AITutor orchestration class
+│   ├── tutor.py              # AITutor orchestration class
+│   ├── server.py             # FastAPI REST server
+│   └── mcp_server.py         # Model Context Protocol (MCP) server for AI assistants
 ├── lab/
 │   ├── deck_50.py            # 60-card curated concept deck across 5 domains
 │   ├── student_responses.py  # Realistic student answers (mastered, partial, misconceptions)
@@ -57,6 +59,8 @@ equimem/
 ├── tests/
 │   ├── test_engine.py        # Mass conservation, kernel ripple, and selection unit tests
 │   ├── test_grader.py        # Decision grader unit tests
+│   ├── test_mcp.py           # Model Context Protocol (MCP) tool tests
+│   ├── test_server.py        # FastAPI endpoint integration tests
 │   └── test_tutor.py         # Full tutor workflow tests
 ├── pyproject.toml            # Project build configuration
 └── .env                      # API keys (GOOGLE_API_KEY / GEMINI_API_KEY)
@@ -180,3 +184,59 @@ result = grader.grade(card=card, student_answer=student_answer)
 engine.review(card_id, score=result.score)
 print(f"Reviewed. Score: {result.score:.2f} | Current Deck Mass Sum: {engine.m.sum():.4f}")
 ```
+
+---
+
+## 6. FastAPI REST Server
+
+Equimem includes a production-ready FastAPI server for any web UI, mobile app, or external agent service:
+
+```bash
+# Start the API server on http://localhost:8000
+python -m equimem.server
+```
+
+Interactive OpenAPI documentation is available at `http://localhost:8000/docs`.
+
+### Key REST Endpoints:
+- `GET /api/health` — Returns deck size, total mass, and model connectivity status.
+- `GET /api/state` — Full knowledge state snapshot (surface variance, entropy, per-topic metrics).
+- `GET /api/cards` — Retrieve all concept cards with current mass and smoothed mastery.
+- `POST /api/cards` — Register one or more new concept cards into the manifold.
+- `POST /api/session/next` — Fetch the next recommended question (withholding answer).
+- `POST /api/session/review` — Submit student response for zero-token evaluation and mass update.
+- `POST /api/search/trajectory` — Run spherical gradient drift search (`downhill` gaps or `uphill` anchors).
+
+---
+
+## 7. Model Context Protocol (MCP) Server for AI Assistants
+
+Equimem provides a native MCP server for integration with LLM coding agents and assistants (Claude Desktop, Cursor, Antigravity, etc.).
+
+### Run Standalone:
+```bash
+python -m equimem.mcp_server
+```
+
+### Configuration (e.g. `claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "equimem": {
+      "command": "python",
+      "args": ["-m", "equimem.mcp_server"],
+      "env": {
+        "GOOGLE_API_KEY": "your_api_key_here"
+      }
+    }
+  }
+}
+```
+
+### Exposed MCP Tools:
+1. `select_next_card(strategy="boundary", temperature=0.10, cooldown=8)` — Selects the next card based on active learning boundary or lowest-mastery valleys.
+2. `review_card(card_id, student_answer)` — Grades free-form recall with Gemini Decision 1 and dynamically updates the conserved mass field.
+3. `add_card(question, answer, topic)` — Adds a new concept card to the conserved manifold.
+4. `trajectory_search(query, direction="downhill", k=5)` — Discovers gaps or mastery anchors by following spherical manifold gradients.
+5. `get_knowledge_state()` — Returns overall diagnostic metrics, surface variance, and domain distributions.
+
