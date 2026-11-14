@@ -18,6 +18,7 @@ from equimem.models import FieldConfig
 from equimem.engine import MassFieldEngine
 from equimem.embedder import GeminiEmbedder, NGramEmbedder
 from equimem.grader import DecisionGrader
+from equimem.mutator import CardMutator
 from lab.deck_50 import CARDS_DATA
 
 # Load API credentials
@@ -28,7 +29,18 @@ server = MCPServer("equimem")
 # Global engine instance
 _engine: Optional[MassFieldEngine] = None
 _grader: Optional[DecisionGrader] = None
+_mutator: Optional[CardMutator] = None
 _cooldown_history: List[int] = []
+
+
+def _get_mutator() -> Optional[CardMutator]:
+    global _mutator
+    if _mutator is None:
+        try:
+            _mutator = CardMutator()
+        except Exception:
+            _mutator = None
+    return _mutator
 
 
 def _get_engine() -> tuple[MassFieldEngine, Optional[DecisionGrader]]:
@@ -237,6 +249,63 @@ def get_knowledge_state() -> Dict[str, Any]:
         "mean_gradient_norm": round(snap.mean_grad_norm, 4),
         "topics": topic_breakdown,
     }
+
+
+@server.tool()
+def diagnose_card(card_id: int) -> Dict[str, Any]:
+    """Diagnose a card's geometric state (isolated spike, consolidated plateau, pothole, unmastered).
+
+    Args:
+        card_id: Integer card ID to diagnose.
+
+    Returns:
+        Diagnostic classification, recommended action, card mass, and neighborhood mastery.
+    """
+    engine, _ = _get_engine()
+    if not (0 <= card_id < engine.n):
+        return {"error": f"Card ID {card_id} out of bounds"}
+    return engine.diagnose_card(card_id)
+
+
+@server.tool()
+def evolve_card(card_id: int) -> Dict[str, Any]:
+    """Manually trigger the evolution of a card based on its neighborhood geometry.
+
+    Upgrades isolated spikes in-place into deeper probes, reframes potholes, or expands plateaus.
+
+    Args:
+        card_id: Integer card ID to evolve.
+
+    Returns:
+        Result of the evolution operation (new question/answer, action taken, mass relaxation).
+    """
+    engine, _ = _get_engine()
+    if not (0 <= card_id < engine.n):
+        return {"error": f"Card ID {card_id} out of bounds"}
+    mutator = _get_mutator()
+    if not mutator:
+        return {"error": "CardMutator is not configured (missing API key)"}
+    return mutator.evolve_card(engine, card_id)
+
+
+@server.tool()
+def expand_cluster(card_id: int, count: int = 2) -> Dict[str, Any]:
+    """Manually trigger outward frontier expansion from a mastered plateau cluster.
+
+    Args:
+        card_id: A mastered card ID whose cluster should serve as the expansion anchor.
+        count: Number of brand-new frontier concept cards to synthesize.
+
+    Returns:
+        Newly created concept cards and new deck size.
+    """
+    engine, _ = _get_engine()
+    if not (0 <= card_id < engine.n):
+        return {"error": f"Card ID {card_id} out of bounds"}
+    mutator = _get_mutator()
+    if not mutator:
+        return {"error": "CardMutator is not configured (missing API key)"}
+    return mutator.expand_plateau_cluster(engine, card_id, count=count)
 
 
 def main():

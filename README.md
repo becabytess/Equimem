@@ -47,7 +47,8 @@ equimem/
 │   ├── template.py           # Structured Q&A formatting for dense embedding
 │   ├── embedder.py           # GeminiEmbedder (3072 dims) with local NGram fallback
 │   ├── grader.py             # DecisionGrader (gemini-decision-1 evaluation head)
-│   ├── engine.py             # MassFieldEngine (conservation, kernel, selection, trajectories)
+│   ├── engine.py             # MassFieldEngine (conservation, kernel, selection, diagnostics)
+│   ├── mutator.py            # CardMutator (in-place mutation & expansion via gemini-3.5-flash-lite)
 │   ├── tutor.py              # AITutor orchestration class
 │   ├── server.py             # FastAPI REST server
 │   └── mcp_server.py         # Model Context Protocol (MCP) server for AI assistants
@@ -60,6 +61,7 @@ equimem/
 │   ├── test_engine.py        # Mass conservation, kernel ripple, and selection unit tests
 │   ├── test_grader.py        # Decision grader unit tests
 │   ├── test_mcp.py           # Model Context Protocol (MCP) tool tests
+│   ├── test_mutator.py       # Leave-one-out diagnostics & in-place mutation tests
 │   ├── test_server.py        # FastAPI endpoint integration tests
 │   └── test_tutor.py         # Full tutor workflow tests
 ├── pyproject.toml            # Project build configuration
@@ -239,4 +241,35 @@ python -m equimem.mcp_server
 3. `add_card(question, answer, topic)` — Adds a new concept card to the conserved manifold.
 4. `trajectory_search(query, direction="downhill", k=5)` — Discovers gaps or mastery anchors by following spherical manifold gradients.
 5. `get_knowledge_state()` — Returns overall diagnostic metrics, surface variance, and domain distributions.
+6. `diagnose_card(card_id)` — Performs Leave-One-Out Regional Diagnostics to detect spikes, plateaus, and potholes.
+7. `evolve_card(card_id)` — On-demand in-place card replacement for isolated spikes or reframing for potholes.
+8. `expand_cluster(card_id, count=2)` — On-demand outward addition of new frontier concept cards for consolidated plateaus.
+
+---
+
+## 8. On-Demand Card Evolution & Mutation
+
+Standard spaced repetition treats cards in complete isolation. Equimem leverages the continuous semantic neighborhood to mathematically distinguish between rote phrasing memorization and genuine conceptual understanding:
+
+### Mathematical Formulation: Leave-One-Out Neighborhood Mastery
+
+For any card $v_i$, we extract its surrounding neighborhood mastery excluding card $i$ itself:
+
+$$\bar{m}_{-i} = \frac{\Phi(v_i) - m_i}{\rho_0(v_i) - 1.0} = \frac{\sum_{j \neq i} m_j K(v_i, v_j)}{\sum_{j \neq i} K(v_i, v_j)}$$
+
+The **Spike Residual** measures the discrepancy between local card score and neighborhood mastery:
+
+$$\Delta_i = m_i - \bar{m}_{-i}$$
+
+### Geometric Signatures and Actions
+
+| Geometric Signature | Mathematical Condition | Cognitive Interpretation | Engine Action |
+| :--- | :--- | :--- | :--- |
+| **1. Isolated Spike** | $m_i \ge 1.25$, $\Delta_i \ge 0.30$ | The student aced this specific question, but adjacent semantic neighbors remain weak. The card is either too easy or phrased too simply. | **In-Place Mutation**: Upgrades card $i$ into a deeper, mechanism-level synthesis bridging to its weak neighbors. Mass relaxes to $\bar{m}_{-i}$, and conserved mass is redistributed. |
+| **2. Consolidated Plateau** | $m_i \ge 1.15$, $\bar{m}_{-i} \ge 1.05$, $\|\Delta_i\| \le 0.35$ | Both the card and its entire semantic neighborhood are mastered. Conceptual ownership is robust across the cluster. | **Outward Expansion**: Generates brand-new concept cards at the frontier boundary of the cluster ($m = 0.0$). |
+| **3. Isolated Pothole** | $m_i \le 0.75$, $\bar{m}_{-i} \ge 1.05$, $\Delta_i \le -0.30$ | The student understands the domain well, but repeatedly misses this specific card (bad phrasing or conceptual blind spot). | **Anchor Bridge Reframing**: Rewrites card $i$ anchored directly to the strong surrounding concepts already mastered. |
+| **4. Developing Valley** | Otherwise | The region is still emerging or being consolidated. | **Normal Review**: Standard gradient-based review selection. |
+
+> **Strictly Manual Execution**: Generative LLM mutation and expansion are never executed automatically during routine review loops. They are triggered on demand via explicit assistant tool calls (`evolve_card`, `expand_cluster`) or REST endpoints (`/api/cards/{id}/evolve`, `/api/cards/{id}/expand`).
+
 

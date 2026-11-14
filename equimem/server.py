@@ -17,6 +17,7 @@ from equimem.models import FieldConfig
 from equimem.engine import MassFieldEngine
 from equimem.embedder import GeminiEmbedder, NGramEmbedder
 from equimem.grader import DecisionGrader
+from equimem.mutator import CardMutator
 from lab.deck_50 import CARDS_DATA
 
 # Load environment credentials
@@ -30,6 +31,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 class AppState:
     engine: Optional[MassFieldEngine] = None
     grader: Optional[DecisionGrader] = None
+    mutator: Optional[CardMutator] = None
     embedder_type: str = "gemini"
     cooldown_history: List[int] = []
 
@@ -43,7 +45,7 @@ async def lifespan(app: FastAPI):
     if state.engine is None:
         api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
         if api_key:
-            print("[EQUIMEM SERVER] Initializing GeminiEmbedder (3072 dims) & DecisionGrader...")
+            print("[EQUIMEM SERVER] Initializing GeminiEmbedder, DecisionGrader & CardMutator...")
             try:
                 cache_file = os.path.join(os.path.dirname(__file__), "..", "lab", "cache_embeddings_60.npz")
                 if os.path.exists(cache_file):
@@ -57,11 +59,17 @@ async def lifespan(app: FastAPI):
                 embedder = NGramEmbedder(dim=512)
                 state.embedder_type = "ngram-fallback"
             state.grader = DecisionGrader(model="gemini-decision-1")
+            try:
+                state.mutator = CardMutator()
+            except Exception as e:
+                print(f"[EQUIMEM SERVER] Warning: Mutator initialization skipped ({e})")
+                state.mutator = None
         else:
             print("[EQUIMEM SERVER] No API key found. Using NGramEmbedder fallback.")
             embedder = NGramEmbedder(dim=512)
             state.embedder_type = "ngram-fallback"
             state.grader = None
+            state.mutator = None
 
         cfg = FieldConfig(tau=0.15, alpha_gain=0.70, alpha_loss=0.85, select_temp=0.10)
         state.engine = MassFieldEngine(embedder=embedder, config=cfg)
@@ -340,6 +348,44 @@ def trajectory_search(req: TrajectoryRequest):
         for h in res.hits
     ]
     return TrajectoryResponse(query=res.query, direction=res.direction, hits=hits)
+
+
+# =============================================================================
+# On-Demand Evolution Endpoints
+# =============================================================================
+
+@app.get("/api/cards/{card_id}/diagnostics")
+def get_card_diagnostics(card_id: int):
+    eng = state.engine
+    if not eng or not (0 <= card_id < eng.n):
+        raise HTTPException(status_code=404, detail="Card not found")
+    return eng.diagnose_card(card_id)
+
+
+@app.post("/api/cards/{card_id}/evolve")
+def evolve_card(card_id: int):
+    eng = state.engine
+    if not eng or not (0 <= card_id < eng.n):
+        raise HTTPException(status_code=404, detail="Card not found")
+    if not state.mutator:
+        raise HTTPException(status_code=503, detail="Card mutator not configured")
+    try:
+        return state.mutator.evolve_card(eng, card_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Evolution failed: {e}")
+
+
+@app.post("/api/cards/{card_id}/expand")
+def expand_cluster(card_id: int, count: int = 2):
+    eng = state.engine
+    if not eng or not (0 <= card_id < eng.n):
+        raise HTTPException(status_code=404, detail="Card not found")
+    if not state.mutator:
+        raise HTTPException(status_code=503, detail="Card mutator not configured")
+    try:
+        return state.mutator.expand_plateau_cluster(eng, card_id, count=count)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Expansion failed: {e}")
 
 
 def main():

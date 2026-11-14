@@ -378,6 +378,177 @@ class MassFieldEngine:
             paths=paths,
         )
 
+    # ------------------------------------------------------------------ regional diagnostics & mutation
+    def region_diagnostics(self) -> Dict[str, np.ndarray]:
+        """Compare each card's mass m_i against its leave-one-out neighborhood m_bar_neighbors.
+
+        Returns:
+            m: Raw card masses (N,)
+            m_bar_neighbors: Smoothed mastery of surrounding cards excluding self (N,)
+            spike_residual: m_i - m_bar_neighbors (positive = isolated spike, ~0 = uniform plateau)
+            neighbor_density: Effective surrounding concept density rho_0 - 1 (N,)
+        """
+        if self.n <= 1:
+            return {
+                "m": self._m.copy(),
+                "m_bar_neighbors": self._m.copy(),
+                "spike_residual": np.zeros(self.n, dtype=np.float64),
+                "neighbor_density": np.zeros(self.n, dtype=np.float64),
+            }
+
+        K = self._kernel(self._V).copy()                 # (N, N), diagonal is 1.0
+        np.fill_diagonal(K, 0.0)                         # Exclude self (leave-one-out)
+
+        rho_neighbors = K.sum(axis=1)                    # Surrounding concept density
+        phi_neighbors = K @ self._m                      # Surrounding mass potential
+
+        m_bar_neighbors = phi_neighbors / np.maximum(rho_neighbors, 1e-12)
+        spike_residual = self._m - m_bar_neighbors
+
+        return {
+            "m": self._m.copy(),
+            "m_bar_neighbors": m_bar_neighbors,
+            "spike_residual": spike_residual,
+            "neighbor_density": rho_neighbors,
+        }
+
+    def diagnose_card(self, card_id: int) -> Dict[str, Any]:
+        """Classify a card into a geometric state: isolated_spike, consolidated_plateau, isolated_pothole, or unmastered."""
+        if not 0 <= card_id < self.n:
+            raise IndexError(f"Invalid card_id {card_id}")
+
+        diag = self.region_diagnostics()
+        m_i = float(diag["m"][card_id])
+        m_neigh = float(diag["m_bar_neighbors"][card_id])
+        delta_i = float(diag["spike_residual"][card_id])
+        density = float(diag["neighbor_density"][card_id])
+
+        # Rule 1: High card mass, but weak surrounding region -> ISOLATED SPIKE
+        if m_i >= 1.25 and delta_i >= 0.30:
+            state = "isolated_spike"
+            recommended_action = "replace"
+            reason = "Student has memorized this specific card, but adjacent neighbor concepts remain weak. Needs in-place replacement."
+        # Rule 2: High card mass AND high surrounding region -> CONSOLIDATED PLATEAU
+        elif m_i >= 1.15 and m_neigh >= 1.05 and abs(delta_i) <= 0.35:
+            state = "consolidated_plateau"
+            recommended_action = "expand"
+            reason = "Entire local cluster is mastered. Ready for outward frontier expansion with new concepts."
+        # Rule 3: Low card mass in a strong neighborhood -> ISOLATED POTHOLE
+        elif m_i <= 0.75 and m_neigh >= 1.05 and delta_i <= -0.30:
+            state = "isolated_pothole"
+            recommended_action = "reframe"
+            reason = "Student understands the surrounding domain but repeatedly fails this card. Needs reframing."
+        else:
+            state = "unmastered"
+            recommended_action = "review"
+            reason = "Region is still developing. Normal review recommended."
+
+        return {
+            "card_id": card_id,
+            "state": state,
+            "recommended_action": recommended_action,
+            "reason": reason,
+            "mass": round(m_i, 4),
+            "neighbor_mastery": round(m_neigh, 4),
+            "spike_residual": round(delta_i, 4),
+            "neighbor_density": round(density, 4),
+        }
+
+    def get_card_cluster(self, card_id: int, k: int = 5) -> Dict[str, Any]:
+        """Retrieve target card and its k nearest semantic neighbors."""
+        if not 0 <= card_id < self.n:
+            raise IndexError(f"Invalid card_id {card_id}")
+
+        v = self._V[card_id]
+        sims = self._V @ v
+        indices = np.argsort(-sims)
+        neighbor_ids = [int(idx) for idx in indices if idx != card_id][:k]
+
+        target = {
+            "card_id": card_id,
+            "question": self.cards[card_id].question,
+            "answer": self.cards[card_id].answer,
+            "topic": self.cards[card_id].topic,
+            "mass": float(self._m[card_id]),
+            "generation": int(self.cards[card_id].meta.get("generation", 0)),
+        }
+
+        neighbors = []
+        for nid in neighbor_ids:
+            neighbors.append({
+                "card_id": nid,
+                "question": self.cards[nid].question,
+                "answer": self.cards[nid].answer,
+                "topic": self.cards[nid].topic,
+                "mass": float(self._m[nid]),
+                "similarity": float(sims[nid]),
+            })
+
+        return {
+            "target": target,
+            "diagnostics": self.diagnose_card(card_id),
+            "neighbors": neighbors,
+        }
+
+    def replace_card(
+        self,
+        card_id: int,
+        new_question: str,
+        new_answer: str,
+        new_topic: Optional[str] = None,
+        vector: Optional[np.ndarray] = None,
+    ) -> Dict[str, Any]:
+        """In-place mutation of an isolated-spike card into a deeper probe."""
+        if not 0 <= card_id < self.n:
+            raise IndexError(f"Invalid card_id {card_id}")
+
+        diag = self.region_diagnostics()
+        target_mass = float(diag["m_bar_neighbors"][card_id])
+        old_mass = float(self._m[card_id])
+
+        card = self.cards[card_id]
+        topic = new_topic if new_topic is not None else card.topic
+
+        generation = int(card.meta.get("generation", 0)) + 1
+        history = list(card.meta.get("history", []))
+        history.append({
+            "generation": generation - 1,
+            "question": card.question,
+            "answer": card.answer,
+            "mass_before_replacement": old_mass,
+        })
+        card.meta["generation"] = generation
+        card.meta["history"] = history
+        card.meta["prev_question"] = card.question
+
+        card.question = new_question
+        card.answer = new_answer
+        card.topic = topic
+        card.reviews = 0
+        card.correct_sum = 0.0
+
+        if vector is None:
+            text = self.format_card(new_question, new_answer, topic)
+            new_vec = _normalize_rows(self.emb.encode([text])[0])
+        else:
+            new_vec = _normalize_rows(np.asarray(vector, dtype=np.float64))
+
+        self._V[card_id] = new_vec
+
+        # Relax mass from isolated spike down to neighborhood reality, then conserve
+        self._m[card_id] = max(target_mass, 0.5)
+        self._conserve()
+
+        return {
+            "card_id": card_id,
+            "generation": generation,
+            "old_question": card.meta["prev_question"],
+            "new_question": new_question,
+            "mass_before": old_mass,
+            "mass_after": float(self._m[card_id]),
+            "total_mass": float(self._m.sum()),
+        }
+
     # ------------------------------------------------------------------ persistence
     def save(self, path: str) -> None:
         meta = {
