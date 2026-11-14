@@ -14,10 +14,10 @@ Traditional spaced repetition systems (SM-2, Anki, FSRS) rely on artificial wall
    - Each flashcard (Target Question + Reference Answer + Domain) is projected into a dense semantic vector space via `gemini-embedding-001` (3,072 dimensions) and normalized to unit length: $\|v_i\| = 1.0$.
    - Cards that share conceptual foundations sit close to each other on the hypersphere (high cosine similarity $v_i^\top v_j$).
 
-2. **Strict Mass Conservation ($\sum_{i=1}^N m_i = N$)**
-   - Every card carries a scalar mass $m_i \ge 0$. The average mass across the deck is always $1.0$.
-   - **Forgetting is competitive**: When you practice a card and get it right, its mass increases ($+\Delta m$), and this positive mass ripples outward to close neighbors.
-   - To keep total mass constant at $N$, the engine scales down the mass of unreviewed cards proportionally. Knowledge you do not touch gradually deflates as you reinforce other areas.
+2. **Strict Mass Conservation & Competitive Simplex ($\sum_{i=1}^N m_i = N$)**
+   - Every card carries a non-negative scalar mass $m_i \ge 0$. Normalized across the deck, $p_i = m_i / \sum_k m_k$ forms a valid probability distribution on the simplex ($\sum p_i = 1$), scaled by deck size $N$ so mean mass is strictly $1.0$.
+   - **Zero artificial decay rules**: There are zero timers, zero wall-clock intervals, and zero deliberate penalties or deflation loops targeting unreviewed cards.
+   - **Competition is purely emergent (retroactive interference)**: When a card is reviewed, mass updates ripple outward to adjacent concepts proportional to kernel similarity $K(v_i, v_j)$. Because total mass is normalized by the global partition function ($\sum_k m_k$ in the denominator), reinforcing one semantic region shifts relative mass naturally across the manifold—exactly like transformer self-attention and Softmax competition. Distance from the reviewed card governs the proportion of mass gained, and relative difference across the continuous field is the sole driver.
 
 3. **Smooth Neighborhood Mastery & Log-Gradients**
    - Mastery is not binary. The smoothed mastery at any point $x$ is computed using a radial similarity kernel:
