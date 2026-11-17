@@ -138,6 +138,39 @@ def cmd_add(args) -> None:
     }, indent=2))
 
 
+def cmd_search(args) -> None:
+    """Find the top-k nearest crystallized concept cards by cosine similarity."""
+    engine = get_or_create_engine(args.state)
+    if engine.n == 0:
+        print(json.dumps([]))
+        return
+
+    import numpy as np
+    q_vec = engine.emb.encode([args.query])[0]
+    q_norm = float(np.linalg.norm(q_vec))
+    if q_norm > 1e-12:
+        q_vec = q_vec / q_norm
+
+    sims = engine._V @ q_vec
+    top_indices = np.argsort(-sims)[:args.k]
+    snap = engine.surface_state()
+
+    results = []
+    for idx in top_indices:
+        sim = float(sims[idx])
+        c = engine.cards[idx]
+        results.append({
+            "card_id": int(idx),
+            "similarity": round(sim, 4),
+            "topic": c.topic,
+            "question": c.question,
+            "answer": c.answer,
+            "mass": round(float(engine.m[idx]), 4),
+            "smoothed_mastery": round(float(snap.m_bar[idx]), 4),
+        })
+    print(json.dumps(results, indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Equimem CLI: Continuous Conserved-Memory Engine")
     parser.add_argument("--state", default=DEFAULT_STATE_FILE, help="Path to engine state file (.npz)")
@@ -160,6 +193,12 @@ def main() -> None:
     p_add.add_argument("--answer", required=True, help="Canonical answer in student's own words")
     p_add.add_argument("--topic", default="General", help="Topic domain")
     p_add.set_defaults(func=cmd_add)
+
+    # Search subcommand
+    p_search = subparsers.add_parser("search", help="Find nearest crystallized concept cards by cosine similarity")
+    p_search.add_argument("query", help="Concept query or student inquiry")
+    p_search.add_argument("--k", type=int, default=3, help="Number of closest cards to retrieve")
+    p_search.set_defaults(func=cmd_search)
 
     # Cards subcommand
     p_cards = subparsers.add_parser("cards", help="List cards in deck")

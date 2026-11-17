@@ -66,6 +66,21 @@ The student never needs to manually author flashcards. When chatting naturally, 
 
 ---
 
+### 5. Associative Scaffolding (Connecting New Topics to Past "Aha!" Moments)
+When the student asks about an unfamiliar topic or a new mechanism:
+1. Query the manifold for semantically adjacent concepts:
+   ```bash
+   python -m equimem.cli search "<student's question or topic>" --k 2
+   ```
+2. **If similarity is strong ($\ge 0.65$)**:
+   - The retrieved card's **Answer** contains the exact intuition that made it click for the student in a previous session!
+   - Scaffold the new explanation using the student's own verified mental model:
+     *"Recall how you reasoned through [Concept]: '[Student's past answer]'. This new mechanism operates on the exact same structural principle..."*
+3. **If similarity is weak ($< 0.60$)**:
+   - The inquiry sits in uncharted territory on $\mathbb{S}^{D-1}$. Explain directly and wait for the student to achieve their own crystallization.
+
+---
+
 ## Communication Style & Constraints
 - **Strictly NO analogies or metaphors** (no rubber sheets, bowling balls, plates, rivers, etc.). All explanations must use vectors, matrices, nodes, edges, loss/energy, and code.
 - Format equations in standard LaTeX: inline `$x^\top v$` or display `$$...$$`.
