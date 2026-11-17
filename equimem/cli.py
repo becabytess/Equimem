@@ -120,6 +120,24 @@ def cmd_init(args) -> None:
     print(json.dumps({"message": f"Initialized fresh state file {args.state} with {engine.n} cards."}))
 
 
+def cmd_add(args) -> None:
+    """Add a new concept card to the manifold."""
+    engine = get_or_create_engine(args.state)
+    new_ids = engine.add_cards([(args.question, args.answer, args.topic)])
+    engine.save(args.state)
+    cid = new_ids[0]
+    print(json.dumps({
+        "status": "added",
+        "card_id": cid,
+        "question": args.question,
+        "answer": args.answer,
+        "topic": args.topic,
+        "mass": round(float(engine.m[cid]), 4),
+        "deck_size": engine.n,
+        "total_mass": round(float(engine.m.sum()), 4),
+    }, indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Equimem CLI: Continuous Conserved-Memory Engine")
     parser.add_argument("--state", default=DEFAULT_STATE_FILE, help="Path to engine state file (.npz)")
@@ -135,6 +153,13 @@ def main() -> None:
     p_review = subparsers.add_parser("review", help="Apply batch evaluations for touched cards")
     p_review.add_argument("--scores", required=True, help="JSON map of card_id to score: '{\"12\": 0.95}'")
     p_review.set_defaults(func=cmd_review)
+
+    # Add subcommand
+    p_add = subparsers.add_parser("add", help="Add a new concept card to the manifold")
+    p_add.add_argument("--question", required=True, help="Question that elicits the concept")
+    p_add.add_argument("--answer", required=True, help="Canonical answer in student's own words")
+    p_add.add_argument("--topic", default="General", help="Topic domain")
+    p_add.set_defaults(func=cmd_add)
 
     # Cards subcommand
     p_cards = subparsers.add_parser("cards", help="List cards in deck")
