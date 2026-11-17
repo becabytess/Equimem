@@ -308,6 +308,34 @@ def expand_cluster(card_id: int, count: int = 2) -> Dict[str, Any]:
     return mutator.expand_plateau_cluster(engine, card_id, count=count)
 
 
+@server.tool()
+def get_mental_state(top_k: int = 4) -> Dict[str, Any]:
+    """Retrieve ranked mental state snapshot (valleys, anchors, frontier) for Socratic tutoring.
+
+    Args:
+        top_k: Number of cards to surface per category (valleys, anchors, frontier, spikes).
+
+    Returns:
+        Structured mental state JSON containing the student's primary gaps, anchors, and boundaries.
+    """
+    engine, _ = _get_engine()
+    return engine.get_mental_state(top_k=top_k)
+
+
+@server.tool()
+def submit_session_review(evaluations: Dict[str, float]) -> Dict[str, Any]:
+    """Apply holistic session review scores across concept cards touched during conversation and rebalance mass.
+
+    Args:
+        evaluations: Map of card_id (int or str) to comprehension score in [0.0, 1.0].
+
+    Returns:
+        Summary of updated card masses, deltas, and conserved total mass.
+    """
+    engine, _ = _get_engine()
+    return engine.batch_review(evaluations)
+
+
 def main():
     """Run the Equimem MCP server via standard IO or SSE."""
     transport = "stdio"

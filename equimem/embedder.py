@@ -134,3 +134,63 @@ class GeminiEmbedder:
             out[start:end] = self._encode_chunk(chunk)
 
         return _normalize_rows(out)
+
+
+class CachedGeminiEmbedder:
+    """Embedder wrapper with local file caching to prevent redundant API calls."""
+
+    def __init__(
+        self,
+        cache_path: str,
+        model: str = "gemini-embedding-001",
+        dim: int = 3072,
+    ):
+        self.cache_path = cache_path
+        self.dim = int(dim)
+        self.model = model
+        self._live: Optional[GeminiEmbedder] = None
+        self.cache: dict[str, np.ndarray] = {}
+
+        if os.path.exists(cache_path):
+            try:
+                data = np.load(cache_path, allow_pickle=True)
+                keys = data["keys"]
+                vecs = data["vectors"]
+                for k, v in zip(keys, vecs):
+                    self.cache[str(k)] = np.asarray(v, dtype=np.float64)
+            except Exception:
+                pass
+
+    @property
+    def live(self) -> GeminiEmbedder:
+        if self._live is None:
+            self._live = GeminiEmbedder(model=self.model, dim=self.dim)
+        return self._live
+
+    def _save(self) -> None:
+        keys = list(self.cache.keys())
+        if keys:
+            vecs = np.array([self.cache[k] for k in keys], dtype=np.float64)
+            os.makedirs(os.path.dirname(os.path.abspath(self.cache_path)), exist_ok=True)
+            np.savez_compressed(self.cache_path, keys=keys, vectors=vecs)
+
+    def encode(self, texts: Sequence[str]) -> np.ndarray:
+        if isinstance(texts, str):
+            texts = [texts]
+        texts = list(texts)
+        missing = [t for t in texts if t not in self.cache]
+        if missing:
+            try:
+                vecs = self.live.encode(missing)
+                for t, v in zip(missing, vecs):
+                    self.cache[t] = v
+                self._save()
+            except Exception:
+                # If API fails and text missing, fallback to NGram hash
+                fallback = NGramEmbedder(dim=self.dim)
+                vecs = fallback.encode(missing)
+                for t, v in zip(missing, vecs):
+                    self.cache[t] = v
+
+        out = np.array([self.cache[t] for t in texts], dtype=np.float64)
+        return _normalize_rows(out)

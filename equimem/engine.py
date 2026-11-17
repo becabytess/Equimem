@@ -412,6 +412,36 @@ class MassFieldEngine:
             "neighbor_density": rho_neighbors,
         }
 
+    @staticmethod
+    def _classify_geometry(m_i: float, m_neigh: float, delta_i: float) -> Tuple[str, str, str]:
+        """Map a card's geometric signature to a state, action and reason."""
+        # Rule 1: High card mass, but weak surrounding region -> ISOLATED SPIKE
+        if m_i >= 1.25 and delta_i >= 0.30:
+            return (
+                "isolated_spike",
+                "replace",
+                "Student has memorized this specific card, but adjacent neighbor concepts remain weak. Needs in-place replacement.",
+            )
+        # Rule 2: High card mass AND high surrounding region -> CONSOLIDATED PLATEAU
+        if m_i >= 1.15 and m_neigh >= 1.05 and abs(delta_i) <= 0.35:
+            return (
+                "consolidated_plateau",
+                "expand",
+                "Entire local cluster is mastered. Ready for outward frontier expansion with new concepts.",
+            )
+        # Rule 3: Low card mass in a strong neighborhood -> ISOLATED POTHOLE
+        if m_i <= 0.75 and m_neigh >= 1.05 and delta_i <= -0.30:
+            return (
+                "isolated_pothole",
+                "reframe",
+                "Student understands the surrounding domain but repeatedly fails this card. Needs reframing.",
+            )
+        return (
+            "unmastered",
+            "review",
+            "Region is still developing. Normal review recommended.",
+        )
+
     def diagnose_card(self, card_id: int) -> Dict[str, Any]:
         """Classify a card into a geometric state: isolated_spike, consolidated_plateau, isolated_pothole, or unmastered."""
         if not 0 <= card_id < self.n:
@@ -422,36 +452,161 @@ class MassFieldEngine:
         m_neigh = float(diag["m_bar_neighbors"][card_id])
         delta_i = float(diag["spike_residual"][card_id])
         density = float(diag["neighbor_density"][card_id])
-
-        # Rule 1: High card mass, but weak surrounding region -> ISOLATED SPIKE
-        if m_i >= 1.25 and delta_i >= 0.30:
-            state = "isolated_spike"
-            recommended_action = "replace"
-            reason = "Student has memorized this specific card, but adjacent neighbor concepts remain weak. Needs in-place replacement."
-        # Rule 2: High card mass AND high surrounding region -> CONSOLIDATED PLATEAU
-        elif m_i >= 1.15 and m_neigh >= 1.05 and abs(delta_i) <= 0.35:
-            state = "consolidated_plateau"
-            recommended_action = "expand"
-            reason = "Entire local cluster is mastered. Ready for outward frontier expansion with new concepts."
-        # Rule 3: Low card mass in a strong neighborhood -> ISOLATED POTHOLE
-        elif m_i <= 0.75 and m_neigh >= 1.05 and delta_i <= -0.30:
-            state = "isolated_pothole"
-            recommended_action = "reframe"
-            reason = "Student understands the surrounding domain but repeatedly fails this card. Needs reframing."
-        else:
-            state = "unmastered"
-            recommended_action = "review"
-            reason = "Region is still developing. Normal review recommended."
+        state, action, reason = self._classify_geometry(m_i, m_neigh, delta_i)
 
         return {
             "card_id": card_id,
             "state": state,
-            "recommended_action": recommended_action,
+            "recommended_action": action,
             "reason": reason,
             "mass": round(m_i, 4),
             "neighbor_mastery": round(m_neigh, 4),
             "spike_residual": round(delta_i, 4),
             "neighbor_density": round(density, 4),
+        }
+
+    def diagnose_all(self) -> List[Dict[str, Any]]:
+        """Scan the entire deck in one pass and return every card's geometric signature.
+
+        This is the deck-wide view of the manifold: it computes leave-one-out
+        neighbourhood mastery once, then classifies each card so the caller can
+        surface the regions that actually deserve mutation / expansion / reframing.
+        """
+        if self.n == 0:
+            return []
+        diag = self.region_diagnostics()
+        results: List[Dict[str, Any]] = []
+        for i in range(self.n):
+            m_i = float(diag["m"][i])
+            m_neigh = float(diag["m_bar_neighbors"][i])
+            delta_i = float(diag["spike_residual"][i])
+            density = float(diag["neighbor_density"][i])
+            state, action, reason = self._classify_geometry(m_i, m_neigh, delta_i)
+            results.append(
+                {
+                    "card_id": i,
+                    "question": self.cards[i].question,
+                    "topic": self.cards[i].topic,
+                    "state": state,
+                    "recommended_action": action,
+                    "reason": reason,
+                    "mass": round(m_i, 4),
+                    "neighbor_mastery": round(m_neigh, 4),
+                    "spike_residual": round(delta_i, 4),
+                    "neighbor_density": round(density, 4),
+                }
+            )
+        return results
+
+    def get_mental_state(self, top_k: int = 4) -> Dict[str, Any]:
+        """Extract continuous, ranked Mental State snapshot for Socratic AI tutoring.
+
+        Returns top ranked concept nodes across four continuous topological roles:
+        - valleys: lowest smoothed mastery m_bar (primary learning gaps)
+        - anchors: highest smoothed mastery m_bar (mastered knowledge to scaffold on)
+        - frontier: highest gradient norms ||nabla log m_bar|| (active learning boundaries)
+        - spikes: highest positive residuals Delta_i = m_i - m_bar_neighbors (phrasing memorization)
+        """
+        if self.n == 0:
+            return {
+                "valleys": [],
+                "anchors": [],
+                "frontier": [],
+                "spikes": [],
+                "deck_summary": {"total_cards": 0, "total_mass": 0.0, "step": self.step},
+            }
+
+        k = min(int(top_k), self.n)
+        snap = self.surface_state()
+        diag = self.region_diagnostics()
+
+        def _card_dict(idx: int, **kwargs) -> Dict[str, Any]:
+            c = self.cards[idx]
+            d = {
+                "card_id": idx,
+                "question": c.question,
+                "answer": c.answer,
+                "topic": c.topic,
+                "mass": round(float(self._m[idx]), 4),
+                "smoothed_mastery": round(float(snap.m_bar[idx]), 4),
+            }
+            d.update(kwargs)
+            return d
+
+        # 1. Valleys: lowest smoothed mastery m_bar
+        valley_order = np.argsort(snap.m_bar)
+        valleys = [_card_dict(int(i)) for i in valley_order[:k]]
+
+        # 2. Anchors: highest smoothed mastery m_bar
+        anchor_order = np.argsort(-snap.m_bar)
+        anchors = [_card_dict(int(i)) for i in anchor_order[:k]]
+
+        # 3. Frontier boundaries: highest gradient norms
+        frontier_order = np.argsort(-snap.grad_norm)
+        frontier = [
+            _card_dict(int(i), grad_norm=round(float(snap.grad_norm[i]), 4))
+            for i in frontier_order[:k]
+        ]
+
+        # 4. Spikes: highest positive residual discrepancy Delta_i
+        spike_order = np.argsort(-diag["spike_residual"])
+        spikes = [
+            _card_dict(
+                int(i),
+                spike_residual=round(float(diag["spike_residual"][i]), 4),
+                neighbor_mastery=round(float(diag["m_bar_neighbors"][i]), 4),
+            )
+            for i in spike_order[:k]
+            if float(diag["spike_residual"][i]) > 0.0
+        ]
+
+        return {
+            "valleys": valleys,
+            "anchors": anchors,
+            "frontier": frontier,
+            "spikes": spikes,
+            "deck_summary": {
+                "total_cards": self.n,
+                "total_mass": round(float(self._m.sum()), 6),
+                "variance": round(float(snap.variance), 6),
+                "entropy": round(float(snap.entropy), 4),
+                "step": self.step,
+            },
+        }
+
+    def batch_review(self, scores: Dict[Union[int, str], float]) -> Dict[str, Any]:
+        """Apply evaluations for multiple concepts touched in a Socratic session and conserve mass."""
+        if not scores:
+            return {"reviews_applied": 0, "total_mass": float(self._m.sum()), "deltas": {}}
+
+        masses_before = self._m.copy()
+        applied = 0
+        deltas = {}
+
+        for k, score in scores.items():
+            cid = int(k)
+            if 0 <= cid < self.n:
+                y = float(score)
+                self.review(cid, y)
+                applied += 1
+
+        for k, score in scores.items():
+            cid = int(k)
+            if 0 <= cid < self.n:
+                deltas[str(cid)] = {
+                    "question": self.cards[cid].question,
+                    "topic": self.cards[cid].topic,
+                    "score": float(score),
+                    "mass_before": round(float(masses_before[cid]), 4),
+                    "mass_after": round(float(self._m[cid]), 4),
+                    "delta": round(float(self._m[cid] - masses_before[cid]), 4),
+                }
+
+        return {
+            "reviews_applied": applied,
+            "step": self.step,
+            "total_mass": round(float(self._m.sum()), 6),
+            "deltas": deltas,
         }
 
     def get_card_cluster(self, card_id: int, k: int = 5) -> Dict[str, Any]:

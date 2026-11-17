@@ -175,6 +175,10 @@ class TrajectoryResponse(BaseModel):
     hits: List[TrajectoryHitResponse]
 
 
+class BatchReviewRequest(BaseModel):
+    scores: Dict[str, float] = Field(..., description="Map of card_id to score in [0.0, 1.0]")
+
+
 class HealthResponse(BaseModel):
     status: str
     deck_size: int
@@ -348,6 +352,24 @@ def trajectory_search(req: TrajectoryRequest):
         for h in res.hits
     ]
     return TrajectoryResponse(query=res.query, direction=res.direction, hits=hits)
+
+
+@app.get("/api/session/mental-state")
+def get_mental_state(top_k: int = 4):
+    """Retrieve ranked mental state snapshot (valleys, anchors, frontier) for Socratic tutoring."""
+    eng = state.engine
+    if not eng:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    return eng.get_mental_state(top_k=top_k)
+
+
+@app.post("/api/session/batch-review")
+def batch_review(req: BatchReviewRequest):
+    """Apply session review scores across multiple concept cards and conserve mass."""
+    eng = state.engine
+    if not eng:
+        raise HTTPException(status_code=503, detail="Engine not initialized")
+    return eng.batch_review(req.scores)
 
 
 # =============================================================================

@@ -50,6 +50,7 @@ equimem/
 │   ├── engine.py             # MassFieldEngine (conservation, kernel, selection, diagnostics)
 │   ├── mutator.py            # CardMutator (in-place mutation & expansion via gemini-3.5-flash-lite)
 │   ├── tutor.py              # AITutor orchestration class
+│   ├── cli.py                # Command-line interface for agents and terminal study
 │   ├── server.py             # FastAPI REST server
 │   └── mcp_server.py         # Model Context Protocol (MCP) server for AI assistants
 ├── lab/
@@ -58,6 +59,7 @@ equimem/
 │   ├── simulate_50_cards.py  # 40-round end-to-end simulation harness
 │   └── demo_tutor.py         # Live single-session interactive demo
 ├── tests/
+│   ├── test_cli.py           # CLI commands, MentalState snapshot, and batch review tests
 │   ├── test_engine.py        # Mass conservation, kernel ripple, and selection unit tests
 │   ├── test_grader.py        # Decision grader unit tests
 │   ├── test_mcp.py           # Model Context Protocol (MCP) tool tests
@@ -271,5 +273,62 @@ $$\Delta_i = m_i - \bar{m}_{-i}$$
 | **4. Developing Valley** | Otherwise | The region is still emerging or being consolidated. | **Normal Review**: Standard gradient-based review selection. |
 
 > **Strictly Manual Execution**: Generative LLM mutation and expansion are never executed automatically during routine review loops. They are triggered on demand via explicit assistant tool calls (`evolve_card`, `expand_cluster`) or REST endpoints (`/api/cards/{id}/evolve`, `/api/cards/{id}/expand`).
+
+---
+
+## 9. Local Study UI
+
+A self-contained browser app for everyday studying. It keeps its own deck and state in `ui_data/` (gitignored), so your cards and progress survive restarts.
+
+```bash
+python run_ui.py          # or: python -m equimem.ui_app
+```
+
+Then open **http://localhost:8000**.
+
+Features:
+
+- **Study** — the engine selects the next card at the active frontier. Type a free-form answer for `gemini-decision-1` grading (posterior probabilities shown), or reveal the reference answer and self-grade with *Again / Hard / Good / Easy*. Space = reveal / next, `1`–`4` = grade.
+- **Library** — search/filter cards, create cards, inspect per-card diagnostics and semantic neighbours, delete cards, and load the 60-card demo deck.
+- **Generate with AI** — describe in detail what you want to study, choose how many cards (1–20), and Gemini Flash writes them automatically. Generated cards enter the manifold at zero mass (fresh valleys). Backed by `POST /api/cards/generate` → `CardMutator.generate_cards`.
+- **Evolution** — a *deck-wide* scan (`MassFieldEngine.diagnose_all` → `GET /api/evolution/scan`) computes leave-one-out neighbourhood mastery for every card at once and surfaces the regions that deserve action: isolated spikes (mutate), consolidated plateaus (expand), isolated potholes (reframe), and still-developing valleys. The engine finds the candidates; execution remains manual via one-click actions on each surfaced card. With a Gemini key these use the real `CardMutator` (Flash-lite); otherwise deterministic local heuristics.
+- **Field Map** — a 2-D PCA projection of the unit hypersphere (dot size = mass, red halo = weak region) plus downhill/uphill trajectory search.
+- **Insights** — conserved mass, surface variance, entropy, and per-domain mastery diagnostics.
+
+If no `GOOGLE_API_KEY` / `GEMINI_API_KEY` is present, the app still works fully offline with an N-gram embedder, self-grading, and local evolution heuristics.
+
+---
+
+## 10. Autonomous Socratic AI Tutor via CLI & Workspace Protocol
+
+You can use any frontier AI assistant (Antigravity, Claude, Argon, etc.) as your live, interactive tutor without running a custom chat app. Antigravity acts directly as the Socratic interface, governed by the workspace `AGENTS.md` protocol and backed by the Equimem CLI:
+
+### 1. The CLI Tool (`equimem.cli`)
+
+- **Export Mental State Snapshot** (Top Valleys, Mastered Anchors, Frontier Boundaries):
+  ```bash
+  python -m equimem.cli state --top-k 4
+  ```
+- **Apply Batch Session Reviews & Rebalance Simplex**:
+  ```bash
+  python -m equimem.cli review --scores '{"12": 0.95, "4": 0.40}'
+  ```
+- **Inspect Specific Concept Cards**:
+  ```bash
+  python -m equimem.cli cards --topic "Quantum"
+  ```
+- **Spherical Trajectory Search**:
+  ```bash
+  python -m equimem.cli trajectory "spectral condition number" --direction downhill
+  ```
+
+### 2. Workspace Protocol (`AGENTS.md`)
+
+When you open a new conversation in this directory and say *"Let's study"*:
+1. The AI agent automatically reads `AGENTS.md`, runs `python -m equimem.cli state`, and inspects your current valleys and anchors.
+2. It greets you and initiates a Socratic dialogue, using your **mastered anchors as scaffolding** to probe into your **valleys**.
+3. You can explore tangents, ask clarifying questions, or test mechanisms freely across multi-turn reasoning.
+4. When you indicate you are done (*"wrap up"*, *"save progress"*), the agent holistically grades the concepts discussed and runs `python -m equimem.cli review`, rebalancing the conserved mass field ($\sum m = N$) and persisting your progress across sessions.
+
 
 
